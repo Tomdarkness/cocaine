@@ -43,6 +43,7 @@ module Cocaine
       private
 
       def best_runner
+        return JavaRunner.new    if jruby?
         return PosixRunner.new   if posix_spawn_available?
         return ProcessRunner.new if Process.respond_to?(:spawn)
         BackticksRunner.new
@@ -81,19 +82,27 @@ module Cocaine
       rescue Errno::ENOENT
         raise Cocaine::CommandNotFoundError
       ensure
-        @exit_status = $?.exitstatus
+        if jruby?
+          @exit_status = runner.exitstatus
+        else
+          @exit_status = $?.exitstatus
+        end
       end
-      if $?.exitstatus == 127
+      if @exit_status == 127
         raise Cocaine::CommandNotFoundError
       end
-      unless @expected_outcodes.include?($?.exitstatus)
-        raise Cocaine::ExitStatusError, "Command '#{command}' returned #{$?.exitstatus}. Expected #{@expected_outcodes.join(", ")}"
+      unless @expected_outcodes.include?(@exit_status)
+        raise Cocaine::ExitStatusError, "Command '#{command}' returned #{@exit_status.exitstatus}. Expected #{@expected_outcodes.join(", ")}"
       end
       output
     end
 
     def unix?
       RbConfig::CONFIG['host_os'] !~ /mswin|mingw/
+    end
+
+    def jruby?
+      defined?(RUBY_ENGINE) && RUBY_ENGINE == 'jruby'
     end
 
     private
